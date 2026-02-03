@@ -7,6 +7,56 @@ export const Tasks: React.FC = () => {
   const navigate = useNavigate();
   const [showGoalModal, setShowGoalModal] = useState(false);
 
+  // Mock Data with one task exceeding target to demonstrate the feature
+  const [tasks] = useState([
+    { 
+      id: '1', 
+      title: 'Vocabulary Practice', 
+      targetMinutes: 30, 
+      accumulatedMinutes: 32, // Exceeds target
+      reward: 5 
+    },
+    { 
+      id: '2', 
+      title: "Reading 'Atomic Habits'", 
+      targetMinutes: 45, 
+      accumulatedMinutes: 5, 
+      reward: 10 
+    }
+  ]);
+
+  const handleStartTask = (taskName: string, targetMinutes: number, accumulatedMinutes: number = 0) => {
+    navigate('/focus', { 
+      state: { 
+        mode: 'task', 
+        taskName, 
+        targetMinutes, 
+        accumulatedMinutes // Pass existing progress
+      } 
+    });
+  };
+
+  const handleGiveUp = (task: typeof tasks[0]) => {
+    navigate('/fail', {
+      state: {
+        mode: 'task',
+        taskName: task.title,
+        accumulatedMinutes: task.accumulatedMinutes,
+        targetMinutes: task.targetMinutes
+      }
+    });
+  };
+
+  const handleComplete = (task: typeof tasks[0]) => {
+    navigate('/success', {
+      state: {
+        mode: 'task',
+        duration: task.accumulatedMinutes,
+        reward: task.reward
+      }
+    });
+  };
+
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark pb-24">
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-background-dark/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
@@ -19,85 +69,82 @@ export const Tasks: React.FC = () => {
                </button>
             </div>
          </div>
-         <div className="px-4 pb-3">
-            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-               <button className="flex-1 py-1.5 px-3 rounded text-sm font-medium bg-white dark:bg-slate-700 shadow-sm text-primary dark:text-white transition-all">Tasks</button>
-               <button className="flex-1 py-1.5 px-3 rounded text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all">Stats</button>
-            </div>
-         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
          <div className="flex items-center justify-between mb-3">
             <h2 className="text-xl font-bold tracking-tight dark:text-white">Active Tasks</h2>
-            <span className="bg-blue-100 dark:bg-blue-900/30 text-primary dark:text-blue-300 text-xs font-bold px-2 py-1 rounded-full">2 Active</span>
+            <span className="bg-blue-100 dark:bg-blue-900/30 text-primary dark:text-blue-300 text-xs font-bold px-2 py-1 rounded-full">{tasks.length} Active</span>
          </div>
          
          <div className="flex flex-col gap-4 mb-8">
-            <div className="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden group">
-               <div className="absolute top-0 right-0 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
-                  <Icon name="trophy" className="text-sm filled text-yellow-500" />
-                  +5m Play
-               </div>
-               <div className="flex flex-col gap-3 pt-2">
-                  <div>
-                     <h3 className="text-lg font-bold leading-tight dark:text-white">Vocabulary Practice</h3>
-                     <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1 flex items-center gap-1">
-                        <Icon name="timer" className="text-base" /> Target &gt; 30m
-                     </p>
+            {tasks.map(task => {
+              const progressPercent = Math.min(100, Math.round((task.accumulatedMinutes / task.targetMinutes) * 100));
+              const isCompleted = task.accumulatedMinutes >= task.targetMinutes;
+
+              return (
+                <div key={task.id} className="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
+                      <Icon name="trophy" className="text-sm filled text-yellow-500" />
+                      +{task.reward}m Play
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                     <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
-                        <span>15m accumulated</span>
-                        <span>50%</span>
-                     </div>
-                     <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full w-1/2"></div>
-                     </div>
+                  <div className="flex flex-col gap-3 pt-2">
+                      <div>
+                        <h3 className="text-lg font-bold leading-tight dark:text-white">{task.title}</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1 flex items-center gap-1">
+                            <Icon name="timer" className="text-base" /> Target &gt; {task.targetMinutes}m
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
+                            <span>{task.accumulatedMinutes}m accumulated</span>
+                            <span>{progressPercent}%</span>
+                        </div>
+                        <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full w-1/2 transition-all duration-500 ${isCompleted ? 'bg-green-500' : 'bg-primary'}`} 
+                              style={{ width: `${progressPercent}%` }}
+                            ></div>
+                        </div>
+                      </div>
+                      <div className="flex gap-3 mt-2">
+                        <button 
+                          onClick={() => handleStartTask(task.title, task.targetMinutes, task.accumulatedMinutes)} 
+                          className="flex-1 bg-primary hover:bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
+                        >
+                            <Icon name="play_arrow" className="text-lg filled" /> Continue
+                        </button>
+                        
+                        {isCompleted ? (
+                           <button 
+                             onClick={() => handleComplete(task)}
+                             className="bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors border border-green-200 dark:border-green-800 flex items-center gap-1"
+                           >
+                             <Icon name="check" className="text-lg font-bold" /> Complete
+                           </button>
+                        ) : (
+                           <button 
+                             onClick={() => handleGiveUp(task)}
+                             className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors border border-slate-200 dark:border-slate-600"
+                           >
+                             Abandon
+                           </button>
+                        )}
+                      </div>
                   </div>
-                  <div className="flex gap-3 mt-2">
-                     <button onClick={() => navigate('/focus')} className="flex-1 bg-primary hover:bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md shadow-blue-500/20">
-                        <Icon name="play_arrow" className="text-lg filled" /> Continue
-                     </button>
-                     <button className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors border border-slate-200 dark:border-slate-600">Give Up</button>
-                  </div>
-               </div>
-            </div>
-            {/* Second Card */}
-            <div className="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden group">
-               <div className="absolute top-0 right-0 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
-                  <Icon name="trophy" className="text-sm filled text-yellow-500" />
-                  +10m Play
-               </div>
-               <div className="flex flex-col gap-3 pt-2">
-                  <div>
-                     <h3 className="text-lg font-bold leading-tight dark:text-white">Reading 'Atomic Habits'</h3>
-                     <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1 flex items-center gap-1">
-                        <Icon name="timer" className="text-base" /> Target &gt; 45m
-                     </p>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                     <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
-                        <span>5m accumulated</span>
-                        <span>11%</span>
-                     </div>
-                     <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full w-[11%]"></div>
-                     </div>
-                  </div>
-                  <div className="flex gap-3 mt-2">
-                     <button onClick={() => navigate('/focus')} className="flex-1 bg-primary hover:bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md shadow-blue-500/20">
-                        <Icon name="play_arrow" className="text-lg filled" /> Continue
-                     </button>
-                     <button className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:text-red-500 text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors border border-slate-200 dark:border-slate-600">Give Up</button>
-                  </div>
-               </div>
-            </div>
+                </div>
+              );
+            })}
          </div>
 
          <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">History</h2>
-            <button className="text-xs font-semibold text-primary hover:underline">View All</button>
+            <button 
+              onClick={() => navigate('/history')}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              View All
+            </button>
          </div>
          <div className="flex flex-col bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-slate-800">
             <div className="flex items-center p-4 border-b border-slate-100 dark:border-slate-800">

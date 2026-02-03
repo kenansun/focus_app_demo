@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from './Icon';
 
@@ -9,6 +9,21 @@ interface GoalModalProps {
 
 export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
+  const [taskName, setTaskName] = useState('');
+  const [selectedDuration, setSelectedDuration] = useState('45m');
+
+  const getDurationMinutes = (str: string) => parseInt(str.replace('m', ''));
+
+  const handleStart = () => {
+    onClose();
+    navigate('/focus', { 
+      state: { 
+        mode: 'task', 
+        taskName: taskName || 'Untitled Task', 
+        targetMinutes: getDurationMinutes(selectedDuration) 
+      } 
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -33,6 +48,8 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
             <input 
               type="text" 
               placeholder="Math Homework" 
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary focus:border-transparent dark:text-white transition-all"
             />
           </div>
@@ -44,13 +61,14 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
              <span className="text-xs text-primary font-medium">Recommended</span>
            </div>
            <div className="grid grid-cols-4 gap-3">
-             {['30m', '45m', '60m', '90m'].map((time, idx) => (
+             {['30m', '45m', '60m', '90m'].map((time) => (
                <button 
                 key={time} 
-                className={`py-2 rounded-xl text-sm font-medium border transition-all ${idx === 1 ? 'bg-primary text-white border-primary shadow-lg shadow-primary/30 relative' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-primary'}`}
+                onClick={() => setSelectedDuration(time)}
+                className={`py-2 rounded-xl text-sm font-medium border transition-all ${selectedDuration === time ? 'bg-primary text-white border-primary shadow-lg shadow-primary/30 relative' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-primary'}`}
                >
                  {time}
-                 {idx === 1 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-primary rounded-full"></span>}
+                 {selectedDuration === time && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-primary rounded-full"></span>}
                </button>
              ))}
            </div>
@@ -68,10 +86,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <button 
-          onClick={() => {
-            onClose();
-            navigate('/focus');
-          }}
+          onClick={handleStart}
           className="w-full py-4 bg-primary hover:bg-primary-dark text-white rounded-xl font-bold text-lg shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 group"
         >
           Start Task

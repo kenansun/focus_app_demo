@@ -68,7 +68,7 @@ export const Home: React.FC = () => {
       {/* Mode Selection */}
       <section className="px-6 mb-6 grid grid-cols-2 gap-4">
         <div 
-          onClick={() => navigate('/focus')}
+          onClick={() => navigate('/focus', { state: { mode: 'focus' } })}
           className="bg-[#118ab2] rounded-3xl p-5 text-white h-48 flex flex-col justify-between cursor-pointer hover:opacity-90 transition-opacity relative overflow-hidden group"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/20 transition-all"></div>
@@ -82,7 +82,7 @@ export const Home: React.FC = () => {
         </div>
 
         <div 
-          onClick={() => navigate('/focus')}
+          onClick={() => navigate('/focus', { state: { mode: 'play' } })}
           className="bg-[#f4c025] rounded-3xl p-5 text-white h-48 flex flex-col justify-between cursor-pointer hover:opacity-90 transition-opacity relative overflow-hidden group"
         >
            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/20 transition-all"></div>
