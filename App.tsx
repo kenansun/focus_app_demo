@@ -11,7 +11,7 @@ import { Onboarding } from './pages/Onboarding';
 import { SessionResult } from './pages/SessionResult';
 import { GeneralSettings } from './pages/GeneralSettings';
 import { History } from './pages/History';
-import { BlockScreen, RestReminder, EyeCare, FloatingBubble } from './pages/Overlays';
+import { BlockScreen, RestReminder, EyeCare } from './pages/Overlays';
 
 // Guard component to handle session persistence
 const SessionGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -25,7 +25,7 @@ const SessionGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         if (savedSession) {
           const session = JSON.parse(savedSession);
           // Only force redirect for Focus and Play modes
-          if ((session.mode === 'focus' || session.mode === 'play') && location.pathname !== '/focus') {
+          if ((session.mode === 'focus' || session.mode === 'play') && !session.minimized && location.pathname !== '/focus') {
              // Pass the saved state to the route so FocusTimer can hydrate
              navigate('/focus', { state: { ...session, fromGuard: true } });
           }
@@ -70,7 +70,6 @@ const App: React.FC = () => {
               <Route path="/block" element={<BlockScreen />} />
               <Route path="/rest" element={<RestReminder />} />
               <Route path="/eyecare" element={<EyeCare />} />
-              <Route path="/simulation" element={<FloatingBubble />} />
             </Routes>
           </div>
           <BottomNav />

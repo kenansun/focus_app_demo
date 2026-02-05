@@ -1,18 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
-import { Group } from '../types';
-
-const groups: Group[] = [
-  { id: '1', name: 'Work', appCount: 8, icon: 'work', color: 'text-primary' },
-  { id: '2', name: 'Social', appCount: 3, icon: 'chat_bubble', color: 'text-purple-500' },
-  { id: '3', name: 'Games', appCount: 12, icon: 'sports_esports', color: 'text-orange-500' },
-  { id: '4', name: 'Sleep', appCount: 2, icon: 'bedtime', color: 'text-indigo-500' },
-  { id: '5', name: 'Creativity', appCount: 5, icon: 'palette', color: 'text-pink-500' },
-];
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../src/db/db';
+import { v4 as uuidv4 } from 'uuid';
 
 export const AppGroups: React.FC = () => {
   const navigate = useNavigate();
+  const groups = useLiveQuery(() => db.groups.toArray(), []) || [];
+
+  const handleCreateGroup = async () => {
+    // Basic creation logic for now
+    await db.groups.add({
+      id: uuidv4(),
+      name: 'New Group',
+      icon: 'folder',
+      color: 'text-slate-500',
+      packageNames: []
+    });
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    if (confirm('Are you sure you want to delete this group?')) {
+      await db.groups.delete(id);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark pb-24">
@@ -32,7 +44,7 @@ export const AppGroups: React.FC = () => {
               </div>
               <div className="flex flex-col justify-center">
                 <h3 className="text-base font-bold leading-tight text-slate-900 dark:text-white">{group.name}</h3>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{group.appCount} apps included</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{group.packageNames.length} apps included</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -44,6 +56,7 @@ export const AppGroups: React.FC = () => {
                 <Icon name="edit" size={20} />
               </button>
               <button 
+                onClick={() => handleDeleteGroup(group.id)}
                 aria-label={`Delete ${group.name} Group`} 
                 className="p-2 rounded-full text-slate-400 hover:text-danger hover:bg-danger/10 transition-colors"
               >
@@ -54,7 +67,10 @@ export const AppGroups: React.FC = () => {
         ))}
       </main>
 
-      <button className="fixed bottom-[100px] right-5 z-40 flex items-center justify-center size-14 rounded-full bg-primary text-white shadow-lg shadow-primary/30 hover:bg-blue-600 transition-transform active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20">
+      <button 
+        onClick={handleCreateGroup}
+        className="fixed bottom-[100px] right-5 z-40 flex items-center justify-center size-14 rounded-full bg-primary text-white shadow-lg shadow-primary/30 hover:bg-blue-600 transition-transform active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20"
+      >
         <Icon name="add" size={28} />
       </button>
     </div>

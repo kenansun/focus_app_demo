@@ -1,49 +1,94 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { LocalIcon } from '../components/LocalIcon';
+import { db } from '../src/db/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { nativeBridge } from '../src/native/nativeBridge';
 
 export const GeneralSettings: React.FC = () => {
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
   
-  // Helper to load number from local storage with default
-  const usePersistedNumber = (key: string, defaultValue: number) => {
-    return useState(() => {
-      const saved = localStorage.getItem(key);
-      return saved !== null ? Number(saved) : defaultValue;
-    });
-  };
+  // Load settings from DB
+  const settings = useLiveQuery(() => db.settings.get('global-settings'));
 
-  const [focusDuration, setFocusDuration] = usePersistedNumber('settings_focusDuration', 25);
-  const [rewardDuration, setRewardDuration] = usePersistedNumber('settings_rewardDuration', 5);
-  const [usageThreshold, setUsageThreshold] = usePersistedNumber('settings_usageThreshold', 45);
-  const [restDuration, setRestDuration] = usePersistedNumber('settings_restDuration', 20);
-  const [skipsLimit, setSkipsLimit] = usePersistedNumber('settings_skipsLimit', 3);
-  
-  const [permissions, setPermissions] = useState(() => {
-    const stored = localStorage.getItem('settings_permissions');
-    return stored ? JSON.parse(stored) : {
-      accessibility: true,
-      overlay: true,
-      usage: false,
-      admin: false
-    };
+  // Local state for form fields
+  const [formData, setFormData] = useState({
+      focusDuration: 25,
+      rewardDuration: 5,
+      usageThreshold: 45,
+      restDuration: 20,
+      dailyGoalMinutes: 240,
+      skipsLimit: 3,
+      permissions: {
+          accessibility: false,
+          overlay: false,
+          usage: false,
+          admin: false
+      }
   });
 
-  const togglePermission = (key: keyof typeof permissions) => {
-    setPermissions(prev => ({ ...prev, [key]: !prev[key] }));
+  // Hydrate form when settings are loaded
+  useEffect(() => {
+      if (settings) {
+          setFormData({
+              focusDuration: settings.focusDuration,
+              rewardDuration: settings.rewardDuration,
+              usageThreshold: settings.usageThreshold,
+              restDuration: settings.restDuration,
+              dailyGoalMinutes: settings.dailyGoalMinutes || 240,
+              skipsLimit: 3, // Assuming this is not in DB yet, or use default
+              permissions: {
+                  accessibility: settings.permissions.accessibility === 'granted',
+                  overlay: settings.permissions.overlay === 'granted',
+                  usage: settings.permissions.usage === 'granted',
+                  admin: settings.permissions.admin === 'granted'
+              }
+          });
+      }
+  }, [settings]);
+
+  const handleChange = (field: string, value: any) => {
+      setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
+  const togglePermission = (key: keyof typeof formData.permissions) => {
+    setFormData(prev => ({
+        ...prev,
+        permissions: {
+            ...prev.permissions,
+            [key]: !prev.permissions[key]
+        }
+    }));
+    if (key === 'overlay') nativeBridge.requestOverlayPermission();
+    if (key === 'usage') nativeBridge.requestUsageAccess();
+    if (key === 'accessibility') nativeBridge.requestAccessibilityService();
+  };
+
+  const handleSave = async () => {
     setIsSaving(true);
     
-    // Save to localStorage
-    localStorage.setItem('settings_focusDuration', String(focusDuration));
-    localStorage.setItem('settings_rewardDuration', String(rewardDuration));
-    localStorage.setItem('settings_usageThreshold', String(usageThreshold));
-    localStorage.setItem('settings_restDuration', String(restDuration));
-    localStorage.setItem('settings_skipsLimit', String(skipsLimit));
-    localStorage.setItem('settings_permissions', JSON.stringify(permissions));
+    // Map boolean permissions back to PermissionStatus enum strings if needed, 
+    // or just assume we store them as is if we changed the type. 
+    // The DB type says PermissionStatus (Granted/Denied/Pending).
+    // For simplicity in this demo, let's map boolean -> 'granted' | 'denied'
+    
+    const mapPerm = (val: boolean) => val ? 'granted' : 'denied';
+
+    await db.settings.update('global-settings', {
+        focusDuration: formData.focusDuration,
+        rewardDuration: formData.rewardDuration,
+        usageThreshold: formData.usageThreshold,
+        restDuration: formData.restDuration,
+        dailyGoalMinutes: formData.dailyGoalMinutes,
+        permissions: {
+            accessibility: mapPerm(formData.permissions.accessibility),
+            overlay: mapPerm(formData.permissions.overlay),
+            usage: mapPerm(formData.permissions.usage),
+            admin: mapPerm(formData.permissions.admin)
+        }
+    });
 
     // Simulate network/processing delay for better UX
     setTimeout(() => {
@@ -51,6 +96,8 @@ export const GeneralSettings: React.FC = () => {
       navigate(-1);
     }, 600);
   };
+
+  if (!settings) return null; // Or loading spinner
 
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white antialiased overflow-y-auto pb-8">
@@ -62,7 +109,7 @@ export const GeneralSettings: React.FC = () => {
                 className="text-primary hover:text-blue-600 flex items-center gap-1 transition-colors group"
                 disabled={isSaving}
             >
-                <Icon name="arrow_back_ios" className="text-[20px] group-hover:-translate-x-0.5 transition-transform" />
+                <LocalIcon name="arrow_back" className="group-hover:-translate-x-0.5 transition-transform" size={20} />
                 <span className="text-base font-normal">Back</span>
             </button>
             <h1 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight absolute left-1/2 -translate-x-1/2">
@@ -102,11 +149,11 @@ export const GeneralSettings: React.FC = () => {
                         <input 
                             id="focus-duration" 
                             type="number" 
-                            value={focusDuration}
-                            onChange={(e) => setFocusDuration(Number(e.target.value))}
+                            value={formData.focusDuration}
+                            onChange={(e) => handleChange('focusDuration', Number(e.target.value))}
                             className="w-20 text-right bg-transparent border-none focus:ring-0 text-primary font-medium text-lg p-0 placeholder:text-slate-300" 
                         />
-                        <Icon name="edit" className="text-slate-300 text-[20px]" />
+                        <LocalIcon name="category" className="text-slate-300" size={20} />
                     </div>
                 </div>
                 {/* Reward Duration Row */}
@@ -118,17 +165,33 @@ export const GeneralSettings: React.FC = () => {
                         <input 
                             id="reward-duration" 
                             type="number" 
-                            value={rewardDuration}
-                            onChange={(e) => setRewardDuration(Number(e.target.value))}
+                            value={formData.rewardDuration}
+                            onChange={(e) => handleChange('rewardDuration', Number(e.target.value))}
                             className="w-20 text-right bg-transparent border-none focus:ring-0 text-primary font-medium text-lg p-0 placeholder:text-slate-300" 
                         />
-                        <Icon name="edit" className="text-slate-300 text-[20px]" />
+                        <LocalIcon name="category" className="text-slate-300" size={20} />
+                    </div>
+                </div>
+                {/* Daily Goal Row */}
+                <div className="flex items-center justify-between p-4 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group">
+                    <label className="flex-1 text-base font-medium text-slate-900 dark:text-white cursor-pointer" htmlFor="daily-goal">
+                        Daily Goal <span className="text-slate-400 font-normal text-sm ml-1">(min)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                        <input 
+                            id="daily-goal" 
+                            type="number" 
+                            value={formData.dailyGoalMinutes}
+                            onChange={(e) => handleChange('dailyGoalMinutes', Number(e.target.value))}
+                            className="w-20 text-right bg-transparent border-none focus:ring-0 text-primary font-medium text-lg p-0 placeholder:text-slate-300" 
+                        />
+                        <LocalIcon name="category" className="text-slate-300" size={20} />
                     </div>
                 </div>
             </div>
             {/* Meta Text */}
             <p className="text-slate-500 dark:text-slate-400 text-xs font-normal leading-relaxed mt-2 px-4">
-                Earn {rewardDuration} minutes of play for every {focusDuration} minutes of focus.
+                Earn {formData.rewardDuration} minutes of play for every {formData.focusDuration} minutes of focus.
             </p>
         </section>
 
@@ -145,8 +208,8 @@ export const GeneralSettings: React.FC = () => {
                     </label>
                     <input 
                         type="number" 
-                        value={usageThreshold}
-                        onChange={(e) => setUsageThreshold(Number(e.target.value))}
+                        value={formData.usageThreshold}
+                        onChange={(e) => handleChange('usageThreshold', Number(e.target.value))}
                         className="w-20 text-right bg-transparent border-none focus:ring-0 text-primary font-medium text-lg p-0" 
                     />
                 </div>
@@ -157,8 +220,8 @@ export const GeneralSettings: React.FC = () => {
                     </label>
                     <input 
                         type="number" 
-                        value={restDuration}
-                        onChange={(e) => setRestDuration(Number(e.target.value))}
+                        value={formData.restDuration}
+                        onChange={(e) => handleChange('restDuration', Number(e.target.value))}
                         className="w-20 text-right bg-transparent border-none focus:ring-0 text-primary font-medium text-lg p-0" 
                     />
                 </div>
@@ -169,24 +232,24 @@ export const GeneralSettings: React.FC = () => {
                     </label>
                     <div className="flex items-center gap-3">
                         <button 
-                            onClick={() => setSkipsLimit(Math.max(0, skipsLimit - 1))}
+                            onClick={() => handleChange('skipsLimit', Math.max(0, formData.skipsLimit - 1))}
                             className="size-8 rounded-full bg-slate-100 dark:bg-slate-700 text-primary flex items-center justify-center hover:bg-primary/10 transition-colors"
                         >
-                            <Icon name="remove" className="text-[20px]" />
+                            <LocalIcon name="chevron_right" className="rotate-180" size={20} />
                         </button>
-                        <span className="text-slate-900 dark:text-white font-medium text-lg w-4 text-center">{skipsLimit}</span>
+                        <span className="text-slate-900 dark:text-white font-medium text-lg w-4 text-center">{formData.skipsLimit}</span>
                         <button 
-                            onClick={() => setSkipsLimit(skipsLimit + 1)}
+                            onClick={() => handleChange('skipsLimit', formData.skipsLimit + 1)}
                             className="size-8 rounded-full bg-slate-100 dark:bg-slate-700 text-primary flex items-center justify-center hover:bg-primary/10 transition-colors"
                         >
-                            <Icon name="add" className="text-[20px]" />
+                            <LocalIcon name="chevron_right" size={20} />
                         </button>
                     </div>
                 </div>
                 {/* Force Unlock PIN Action */}
                 <div className="p-4 bg-white dark:bg-surface-dark">
                     <button className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg transition-all active:scale-[0.98] shadow-sm shadow-blue-200 dark:shadow-none">
-                        <Icon name="lock" className="text-[20px]" filled />
+                        <LocalIcon name="security" size={20} />
                         Set Force Unlock PIN
                     </button>
                 </div>
@@ -203,10 +266,10 @@ export const GeneralSettings: React.FC = () => {
                 <div className="flex items-center justify-between p-4 bg-white dark:bg-surface-dark">
                     <div className="flex items-center gap-2 flex-1 pr-4">
                         <span className="text-base font-medium text-slate-900 dark:text-white">Accessibility Service</span>
-                        <Icon name="info" className="text-slate-400 text-[18px] cursor-help" title="Required to detect app usage" />
+                        <LocalIcon name="verified_user" className="text-slate-400" size={18} />
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={permissions.accessibility} onChange={() => togglePermission('accessibility')} className="sr-only peer" />
+                        <input type="checkbox" checked={formData.permissions.accessibility} onChange={() => togglePermission('accessibility')} className="sr-only peer" />
                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                     </label>
                 </div>
@@ -216,7 +279,7 @@ export const GeneralSettings: React.FC = () => {
                         <span className="text-base font-medium text-slate-900 dark:text-white">Overlay Permission</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={permissions.overlay} onChange={() => togglePermission('overlay')} className="sr-only peer" />
+                        <input type="checkbox" checked={formData.permissions.overlay} onChange={() => togglePermission('overlay')} className="sr-only peer" />
                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                     </label>
                 </div>
@@ -226,7 +289,7 @@ export const GeneralSettings: React.FC = () => {
                         <span className="text-base font-medium text-slate-900 dark:text-white">Usage Access</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={permissions.usage} onChange={() => togglePermission('usage')} className="sr-only peer" />
+                        <input type="checkbox" checked={formData.permissions.usage} onChange={() => togglePermission('usage')} className="sr-only peer" />
                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                     </label>
                 </div>
@@ -234,10 +297,10 @@ export const GeneralSettings: React.FC = () => {
                 <div className="flex items-center justify-between p-4 bg-white dark:bg-surface-dark">
                     <div className="flex items-center gap-2 flex-1 pr-4">
                         <span className="text-base font-medium text-slate-900 dark:text-white">Device Admin</span>
-                        <Icon name="info" className="text-slate-400 text-[18px] cursor-help" title="Prevents app uninstallation during focus" />
+                        <LocalIcon name="verified_user" className="text-slate-400" size={18} />
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={permissions.admin} onChange={() => togglePermission('admin')} className="sr-only peer" />
+                        <input type="checkbox" checked={formData.permissions.admin} onChange={() => togglePermission('admin')} className="sr-only peer" />
                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                     </label>
                 </div>

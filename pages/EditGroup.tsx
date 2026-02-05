@@ -1,30 +1,49 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { AppItem } from '../types';
+import { db } from '../src/db/db';
+import { useLiveQuery } from 'dexie-react-hooks';
 
-const initialAddedApps: AppItem[] = [
-  { id: '1', name: 'Slack', icon: 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Slack_icon_2019.svg', category: 'Work', isAdded: true },
-  { id: '2', name: 'Gmail', icon: 'https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg', category: 'Work', isAdded: true },
-  { id: '3', name: 'Calendar', icon: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg', category: 'Work', isAdded: true },
-  { id: '4', name: 'Notes', icon: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png', category: 'Work', isAdded: true },
-];
-
-const initialAvailableApps: AppItem[] = [
-  { id: '5', name: 'Instagram', icon: 'https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg', category: 'Social', isAdded: false },
-  { id: '6', name: 'TikTok', icon: 'https://upload.wikimedia.org/wikipedia/en/a/a9/TikTok_logo.svg', category: 'Social', isAdded: false },
-  { id: '7', name: 'Spotify', icon: 'https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg', category: 'Music', isAdded: false },
-  { id: '8', name: 'Netflix', icon: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Netflix_icon.svg', category: 'Entertainment', isAdded: false },
-  { id: '9', name: 'Twitter/X', icon: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/X_logo_2023.svg', category: 'Social', isAdded: false },
-  { id: '10', name: 'YouTube', icon: 'https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg', category: 'Video', isAdded: false },
+// Mock Installed Apps (Simulating phone's app list)
+const ALL_INSTALLED_APPS: AppItem[] = [
+  { id: 'com.slack', name: 'Slack', icon: 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Slack_icon_2019.svg', category: 'Work', isAdded: false },
+  { id: 'com.google.gmail', name: 'Gmail', icon: 'https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg', category: 'Work', isAdded: false },
+  { id: 'com.google.calendar', name: 'Calendar', icon: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg', category: 'Work', isAdded: false },
+  { id: 'com.notion', name: 'Notes', icon: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png', category: 'Work', isAdded: false },
+  { id: 'com.instagram', name: 'Instagram', icon: 'https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg', category: 'Social', isAdded: false },
+  { id: 'com.tiktok', name: 'TikTok', icon: 'https://upload.wikimedia.org/wikipedia/en/a/a9/TikTok_logo.svg', category: 'Social', isAdded: false },
+  { id: 'com.spotify', name: 'Spotify', icon: 'https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg', category: 'Music', isAdded: false },
+  { id: 'com.netflix', name: 'Netflix', icon: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Netflix_icon.svg', category: 'Entertainment', isAdded: false },
+  { id: 'com.twitter', name: 'Twitter/X', icon: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/X_logo_2023.svg', category: 'Social', isAdded: false },
+  { id: 'com.youtube', name: 'YouTube', icon: 'https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg', category: 'Video', isAdded: false },
 ];
 
 export const EditGroup: React.FC = () => {
   const navigate = useNavigate();
-  const [addedApps, setAddedApps] = useState<AppItem[]>(initialAddedApps);
-  const [availableApps, setAvailableApps] = useState<AppItem[]>(initialAvailableApps);
+  const { id } = useParams<{ id: string }>();
+  const group = useLiveQuery(() => id ? db.groups.get(id) : undefined, [id]);
+
+  const [addedApps, setAddedApps] = useState<AppItem[]>([]);
+  const [availableApps, setAvailableApps] = useState<AppItem[]>([]);
   const [isAddedCollapsed, setIsAddedCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Hydrate state when group loads
+  useEffect(() => {
+      if (group) {
+          const currentPackageNames = new Set(group.packageNames);
+          
+          const added = ALL_INSTALLED_APPS.filter(app => currentPackageNames.has(app.id))
+                                          .map(app => ({ ...app, isAdded: true }));
+          
+          const available = ALL_INSTALLED_APPS.filter(app => !currentPackageNames.has(app.id))
+                                              .map(app => ({ ...app, isAdded: false }));
+          
+          setAddedApps(added);
+          setAvailableApps(available);
+      }
+  }, [group]);
 
   const handleRemoveApp = (app: AppItem) => {
     setAddedApps(prev => prev.filter(a => a.id !== app.id));
@@ -34,6 +53,18 @@ export const EditGroup: React.FC = () => {
   const handleAddApp = (app: AppItem) => {
     setAvailableApps(prev => prev.filter(a => a.id !== app.id));
     setAddedApps(prev => [...prev, { ...app, isAdded: true }]);
+  };
+
+  const handleSave = async () => {
+      if (!group || !id) return;
+      
+      const updatedPackageNames = addedApps.map(a => a.id);
+      
+      await db.groups.update(id, {
+          packageNames: updatedPackageNames
+      });
+      
+      navigate('/apps');
   };
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>, name: string) => {
@@ -48,6 +79,8 @@ export const EditGroup: React.FC = () => {
     app.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (!group) return <div>Loading...</div>;
+
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark">
       <header className="sticky top-0 z-50 w-full bg-surface-light/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
@@ -58,7 +91,7 @@ export const EditGroup: React.FC = () => {
           >
             <Icon name="arrow_back_ios_new" />
           </button>
-          <h1 className="text-base font-bold text-center flex-1 truncate px-2 dark:text-white">Edit "Deep Work"</h1>
+          <h1 className="text-base font-bold text-center flex-1 truncate px-2 dark:text-white">Edit "{group.name}"</h1>
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setIsAddedCollapsed(!isAddedCollapsed)}
@@ -68,7 +101,7 @@ export const EditGroup: React.FC = () => {
               <Icon name={isAddedCollapsed ? "keyboard_arrow_down" : "keyboard_arrow_up"} size={24} />
             </button>
             <button 
-              onClick={() => navigate('/apps')}
+              onClick={handleSave}
               className="text-primary font-semibold text-base hover:text-primary/80 transition-colors"
             >
                 Save

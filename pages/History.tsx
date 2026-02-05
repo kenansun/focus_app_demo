@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
-
-// Mock Data
-const MOCK_HISTORY = [
-  { id: 1, type: 'focus', title: '45m Focus', subtitle: 'Efficiency Mode', time: '09:30 AM', date: 'Today', duration: 45, reward: 5, status: 'completed' },
-  { id: 2, type: 'task', title: 'Math Study', subtitle: 'Goal: 30m / Actual: 35m', time: '02:00 PM', date: 'Yesterday', duration: 35, reward: 0, status: 'success' },
-  { id: 3, type: 'focus', title: '30m Focus', subtitle: 'Efficiency Mode', time: '10:00 AM', date: 'Yesterday', duration: 30, reward: 5, status: 'completed' },
-  { id: 4, type: 'task', title: 'Reading', subtitle: 'Goal: 60m / Actual: 62m', time: '08:00 AM', date: 'Yesterday', duration: 62, reward: 0, status: 'success' },
-  { id: 5, type: 'focus', title: '20m Focus', subtitle: 'Efficiency Mode', time: '11:00 AM', date: 'Oct 28', duration: 20, reward: 0, status: 'completed' },
-  { id: 6, type: 'task', title: 'Physics', subtitle: 'Goal: 45m / Actual: 20m', time: '04:00 PM', date: 'Oct 28', duration: 20, reward: 0, status: 'failed' },
-];
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../src/db/db';
+import { SessionService } from '../src/services/sessionService';
+import { FocusSession } from '../src/db/types';
+import { format, isToday, isYesterday, subDays, startOfDay } from 'date-fns';
 
 export const History: React.FC = () => {
   const navigate = useNavigate();
@@ -21,38 +16,80 @@ export const History: React.FC = () => {
   const [showModeDropdown, setShowModeDropdown] = useState(false);
 
   // Dropdown Options
-  const dateOptions = ['Today', 'Yesterday', 'Last 7 Days', 'Custom Range'];
-  const modeOptions = ['All', 'Focus Mode', 'Task Mode'];
+  const dateOptions = ['Today', 'Yesterday', 'Last 7 Days', 'All Time'];
+  const modeOptions = ['All', 'Focus Mode', 'Task Mode', 'Play Mode'];
+
+  // Query Data from Dexie
+  const historyData = useLiveQuery(async () => {
+      let collection = db.sessions.orderBy('startTime').reverse();
+      
+      // Basic filtering at DB level could go here, but for complex filters with small datasets,
+      // in-memory filtering after fetching recent items is often easier/faster for demos.
+      // Let's fetch all for now or limit to reasonable count (e.g. 100)
+      return await collection.limit(100).toArray();
+  }, []);
 
   // Filtering Logic
-  const filteredData = MOCK_HISTORY.filter(item => {
-    // Mode Filter
-    if (modeFilter === 'Focus Mode' && item.type !== 'focus') return false;
-    if (modeFilter === 'Task Mode' && item.type !== 'task') return false;
+  const filteredData = (historyData || []).filter(item => {
+    const date = new Date(item.startTime);
 
-    // Date Filter (Mock Logic)
-    if (dateFilter === 'Today' && item.date !== 'Today') return false;
-    if (dateFilter === 'Yesterday' && item.date !== 'Yesterday') return false;
-    if (dateFilter === 'Last 7 Days') return true; // Show all for demo
+    // Mode Filter
+    if (modeFilter === 'Focus Mode' && item.mode !== 'focus') return false;
+    if (modeFilter === 'Task Mode' && item.mode !== 'task') return false;
+    if (modeFilter === 'Play Mode' && item.mode !== 'play') return false;
+
+    // Date Filter
+    if (dateFilter === 'Today') return isToday(date);
+    if (dateFilter === 'Yesterday') return isYesterday(date);
+    if (dateFilter === 'Last 7 Days') return date >= subDays(startOfDay(new Date()), 7);
     
     return true;
   });
 
   // Grouping Logic
   const groupedData = filteredData.reduce((groups, item) => {
-    if (!groups[item.date]) groups[item.date] = [];
-    groups[item.date].push(item);
-    return groups;
-  }, {} as Record<string, typeof MOCK_HISTORY>);
+    let dateLabel = '';
+    const date = new Date(item.startTime);
+    
+    if (isToday(date)) dateLabel = 'Today';
+    else if (isYesterday(date)) dateLabel = 'Yesterday';
+    else dateLabel = format(date, 'MMM d, yyyy'); // e.g., Oct 28, 2023
 
-  // Sort dates to ensure Today/Yesterday come first (simple check for demo)
+    if (!groups[dateLabel]) groups[dateLabel] = [];
+    groups[dateLabel].push(item);
+    return groups;
+  }, {} as Record<string, FocusSession[]>);
+
+  // Sort dates
   const sortedDates = Object.keys(groupedData).sort((a, b) => {
     if (a === 'Today') return -1;
     if (b === 'Today') return 1;
     if (a === 'Yesterday') return -1;
     if (b === 'Yesterday') return 1;
-    return 0;
+    // Date string comparison (simple desc sort for other dates)
+    return new Date(b).getTime() - new Date(a).getTime();
   });
+
+  // Helper to format item title/subtitle
+  const getItemDisplay = (item: FocusSession) => {
+      let title = '';
+      let subtitle = '';
+      
+      if (item.mode === 'focus') {
+          title = `${Math.floor(item.durationMinutes)}m Focus`;
+          subtitle = 'Efficiency Mode';
+      } else if (item.mode === 'play') {
+          title = `${Math.floor(item.durationMinutes)}m Play`;
+          subtitle = 'Reward Spent';
+      } else if (item.mode === 'task') {
+          // Ideally we would join with Task table to get title, but for now we might not have it stored in session
+          // We can assume 'Task Focus' or use taskId if we fetch it
+          title = `Task Session`; 
+          subtitle = `${Math.floor(item.durationMinutes)}m progress`;
+      }
+
+      return { title, subtitle };
+  };
 
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark overflow-hidden">
@@ -148,42 +185,43 @@ export const History: React.FC = () => {
                 <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700"></div>
               </div>
 
-              {groupedData[date].map(item => (
-                <div key={item.id} className={`group flex flex-col bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-700/50 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer ${item.status === 'failed' ? 'opacity-80' : ''}`}>
+              {groupedData[date].map(item => {
+                const { title, subtitle } = getItemDisplay(item);
+                return (
+                <div key={item.id} className={`group flex flex-col bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-700/50 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer ${item.status === 'abandoned' ? 'opacity-80' : ''}`}>
                   <div className="flex justify-between items-start gap-3">
                     <div className="flex items-start gap-4 flex-1">
-                      <div className={`flex items-center justify-center rounded-2xl shrink-0 size-12 transition-transform duration-300 group-hover:scale-105 ${item.type === 'focus' ? 'bg-blue-50 dark:bg-blue-500/10 text-primary' : (item.status === 'failed' ? 'bg-red-50 dark:bg-red-500/10 text-red-500' : 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300')}`}>
-                        <Icon name={item.type === 'focus' ? 'schedule' : (item.status === 'failed' ? 'close' : 'track_changes')} className="text-[26px]" />
+                      <div className={`flex items-center justify-center rounded-2xl shrink-0 size-12 transition-transform duration-300 group-hover:scale-105 ${item.mode === 'focus' ? 'bg-blue-50 dark:bg-blue-500/10 text-primary' : (item.status === 'abandoned' ? 'bg-red-50 dark:bg-red-500/10 text-red-500' : 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300')}`}>
+                        <Icon name={item.mode === 'focus' ? 'schedule' : (item.status === 'abandoned' ? 'close' : 'track_changes')} className="text-[26px]" />
                       </div>
                       <div className="flex flex-col justify-center pt-0.5">
-                        <p className={`text-[15px] font-bold leading-tight transition-colors ${item.status === 'failed' ? 'text-slate-500 dark:text-slate-400 line-through' : 'text-slate-900 dark:text-white group-hover:text-primary'}`}>{item.title}</p>
+                        <p className={`text-[15px] font-bold leading-tight transition-colors ${item.status === 'abandoned' ? 'text-slate-500 dark:text-slate-400 line-through' : 'text-slate-900 dark:text-white group-hover:text-primary'}`}>{title}</p>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[13px] mt-1 font-medium">
-                          <span>{item.subtitle}</span>
+                          <span>{subtitle}</span>
                         </div>
                       </div>
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1.5">
-                      {item.reward > 0 && (
+                      {item.rewardChange > 0 && (
                         <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold border border-primary/10 shadow-sm">
-                          +{item.reward}m Reward
+                          +{item.rewardChange}m Reward
                         </span>
                       )}
-                      {item.type === 'task' && item.status === 'success' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold border border-emerald-200 dark:border-emerald-500/20 shadow-sm">
-                          <span className="size-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
-                          Success
+                      {item.rewardChange < 0 && (
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-600 text-[10px] font-bold border border-orange-200 dark:border-orange-500/20 shadow-sm">
+                          {item.rewardChange}m Spent
                         </span>
                       )}
-                      {item.status === 'failed' && (
+                      {item.status === 'abandoned' && (
                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 text-[10px] font-bold border border-red-200 dark:border-red-500/20 shadow-sm">
                            Given Up
                          </span>
                       )}
-                      <p className="text-slate-400 text-[11px] font-medium mt-0.5">{item.time}</p>
+                      <p className="text-slate-400 text-[11px] font-medium mt-0.5">{format(new Date(item.startTime), 'h:mm a')}</p>
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </React.Fragment>
           ))
         )}

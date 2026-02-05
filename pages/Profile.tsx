@@ -1,9 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../src/db/db';
 
 export const Profile: React.FC = () => {
   const navigate = useNavigate();
+  const profile = useLiveQuery(() => db.profile.get('current-user'));
+
+  // Calculate hours and minutes for Total Focus
+  const totalMinutes = profile?.totalFocusTime || 0;
+  const hours = Math.floor(totalMinutes / 60);
+  let minutes = Number((totalMinutes - hours * 60).toFixed(1));
+  let safeHours = hours;
+  if (minutes >= 60) { safeHours += 1; minutes = 0.0; }
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-background-dark overflow-y-auto pb-24">
@@ -25,16 +35,22 @@ export const Profile: React.FC = () => {
        <section className="flex flex-col items-center pt-8 pb-6 px-4">
           <div className="relative mb-4">
              <div className="h-28 w-28 rounded-full bg-slate-100 bg-cover bg-center border-4 border-white dark:border-slate-800 shadow-xl overflow-hidden">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Alex" alt="Avatar" className="w-full h-full" />
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username || 'User'}`} alt="Avatar" className="w-full h-full" />
              </div>
              <div className="absolute bottom-0 right-0 bg-primary h-8 w-8 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 text-white">
                 <Icon name="edit" className="text-sm font-bold" />
              </div>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">Alex Doe</h1>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
-             <Icon name="bolt" className="text-primary text-sm filled" />
-             <p className="text-primary text-sm font-semibold">Total Focus: 124h 15m</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{profile?.username || 'User'}</h1>
+          <div className="flex gap-2">
+             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                <Icon name="bolt" className="text-primary text-sm filled" />
+                <p className="text-primary text-sm font-semibold">Total Focus: {safeHours}h {minutes.toFixed(1)}m</p>
+             </div>
+             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 border border-orange-200">
+                <Icon name="local_fire_department" className="text-orange-500 text-sm filled" />
+                <p className="text-orange-600 text-sm font-semibold">Streak: {profile?.streakDays || 0}</p>
+             </div>
           </div>
        </section>
 

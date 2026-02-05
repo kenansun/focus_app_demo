@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { LocalIcon } from '../components/LocalIcon';
 import { Permission, PermissionStatus } from '../types';
 
 const initialPermissions: Permission[] = [
@@ -37,7 +38,7 @@ export const Onboarding: React.FC = () => {
             <div className="w-full aspect-[2/1] max-h-[140px] bg-slate-200 dark:bg-slate-800 rounded-2xl overflow-hidden relative">
                {/* Illustration Placeholder */}
                <div className="absolute inset-0 flex items-center justify-center">
-                 <Icon name="security" className="text-6xl text-primary/20" />
+                 <LocalIcon name="security" className="text-primary/20" size={72} />
                </div>
                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDaFy-ZvfeI0-UkRsB_dyX07H5P1AyRtq5DnPHJ7n5mwvxRxklwQzk-7SyIiRppTTU7LXf4BFfiLnKDgC9AYxsYQ6hbtXg3xrr4tGsT9VATT_Md2lDCdheGjNBeJnDuRQTw4XGYTRY1n26mnHCFYFNsqb7_YwrB81V0MXOusmQwuuOrxbVWzVHgEQQu0PZfjpeYfybLW5bo3MH_0InSe7xG7pI-w3gMY7HmBU9hK3TnbZPAloMMBRC7KSI4iLUe6ei7TWVwzeuu7z0" alt="Shield" className="w-full h-full object-cover" />
             </div>
@@ -53,7 +54,7 @@ export const Onboarding: React.FC = () => {
                 <div key={p.id} className="flex items-center gap-3 bg-surface-light dark:bg-surface-dark px-3 py-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
                    <div className="flex items-center gap-3 flex-1">
                       <div className="text-primary flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-8">
-                         <Icon name={p.icon} className="text-[20px]" />
+                         <LocalIcon name={p.icon as any} size={20} />
                       </div>
                       <div className="flex flex-col justify-center">
                          <p className="text-sm font-semibold leading-tight mb-0.5">{p.name}</p>
@@ -72,7 +73,7 @@ export const Onboarding: React.FC = () => {
          </div>
          
          <div className="flex items-center justify-center gap-1.5 pb-2 pt-0 opacity-70 shrink-0">
-            <Icon name="verified_user" className="text-slate-400 text-[16px]" />
+            <LocalIcon name="verified_user" className="text-slate-400" size={16} />
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Privacy Protected & Secure</span>
          </div>
 
@@ -92,7 +93,7 @@ const AnalysisStep: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
     <div className="h-full w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white flex flex-col overflow-x-hidden">
        <div className="flex items-center p-4 pb-2 justify-between z-10 sticky top-0 backdrop-blur-md bg-opacity-90">
           <div className="flex size-12 shrink-0 items-center cursor-pointer">
-             <Icon name="arrow_back" className="text-2xl" />
+             <LocalIcon name="arrow_back" size={24} />
           </div>
           <h2 className="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-12">Analyzing Library</h2>
        </div>
@@ -120,7 +121,7 @@ const AnalysisStep: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
              <div key={cat} className="flex flex-col gap-3 p-4 rounded-xl bg-white dark:bg-surface-dark shadow-sm border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center justify-between">
                    <div className={`size-10 rounded-lg flex items-center justify-center ${i===0?'bg-blue-100 text-blue-600':i===1?'bg-purple-100 text-purple-600':i===2?'bg-green-100 text-green-600':'bg-orange-100 text-orange-600'}`}>
-                      <Icon name={i===0?'group':i===1?'sports_esports':i===2?'school':'work'} />
+                      <LocalIcon name={i===0?'group':i===1?'sports_esports':i===2?'school':'work'} />
                    </div>
                    <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded-full">{[14,5,3,8][i]}</span>
                 </div>
@@ -133,7 +134,7 @@ const AnalysisStep: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
           <div className="col-span-2 flex flex-row items-center justify-between gap-3 p-4 rounded-xl bg-slate-100 dark:bg-slate-800/50 shadow-inner border border-transparent dark:border-slate-700">
              <div className="flex items-center gap-4">
                 <div className="size-10 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400">
-                   <Icon name="category" />
+                   <LocalIcon name="category" />
                 </div>
                 <div>
                    <p className="text-base font-bold leading-normal">Uncategorized</p>
@@ -142,7 +143,7 @@ const AnalysisStep: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
              </div>
              <div className="flex items-center gap-2">
                 <span className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded-full">2</span>
-                <Icon name="chevron_right" className="text-slate-400" />
+                <LocalIcon name="chevron_right" className="text-slate-400" />
              </div>
           </div>
        </div>

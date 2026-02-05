@@ -14,41 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              primary: '#137fec',
-              'primary-dark': '#0f6bd0',
-              'background-light': '#f6f7f8',
-              'background-dark': '#101922',
-              'surface-light': '#ffffff',
-              'surface-dark': '#1a2632',
-              success: '#22c55e',
-              danger: '#ef4444',
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              display: ['Inter', 'sans-serif'],
-              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
-            },
-            animation: {
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'breathe': 'breathe 8s infinite ease-in-out',
-            },
-            keyframes: {
-              breathe: {
-                '0%, 100%': { transform: 'scale(1)', opacity: '0.3' },
-                '50%': { transform: 'scale(1.2)', opacity: '0.6' },
-              }
-            }
-          },
-        },
-      };
-    </script>
+    
     <style>
       body {
         -webkit-font-smoothing: antialiased;
@@ -82,5 +48,6 @@
 </head>
   <body class="bg-background-light text-slate-900 dark:bg-background-dark dark:text-white h-screen overflow-hidden">
     <div id="root" class="h-full w-full"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

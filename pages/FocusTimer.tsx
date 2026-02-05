@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { SessionService } from '../src/services/sessionService';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../src/db/db';
+import { nativeBridge } from '../src/native/nativeBridge';
 
 export const FocusTimer: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const profile = useLiveQuery(() => db.profile.get('current-user'));
   
   // Initialize state logic
   const getInitialState = () => {
@@ -19,6 +24,7 @@ export const FocusTimer: React.FC = () => {
          const initialState = {
              mode: 'focus', // default
              taskName: '',
+             taskId: undefined, // Add taskId support
              targetMinutes: 0,
              accumulatedMinutes: 0,
              ...location.state
@@ -33,6 +39,7 @@ export const FocusTimer: React.FC = () => {
 
          return {
              ...initialState,
+             startTime: new Date().toISOString(), // Record start time
              isActive: true, // Start active
          };
      }
@@ -40,16 +47,21 @@ export const FocusTimer: React.FC = () => {
      // Otherwise, try to restore session
      if (savedSessionStr) {
          const session = JSON.parse(savedSessionStr);
-         // Restore session. Requirements: "it's in an unfinished state after being paused"
-         return { ...session, isActive: false };
+         const lastUpdatedAt = typeof session.lastUpdatedAt === 'number' ? session.lastUpdatedAt : Date.now();
+         const isActiveRestored = !!session.isActive;
+         const deltaSeconds = isActiveRestored ? Math.floor((Date.now() - lastUpdatedAt) / 1000) : 0;
+         const restoredSeconds = Math.max(0, (session.seconds || 0) + deltaSeconds);
+         return { ...session, seconds: restoredSeconds, isActive: isActiveRestored, minimized: false };
      }
 
      // Fallback (should rarely happen if flow is correct)
      return { 
          mode: 'focus', 
          taskName: '', 
+         taskId: undefined,
          targetMinutes: 0, 
          seconds: 0, 
+         startTime: new Date().toISOString(),
          isActive: true,
          ...location.state 
      };
@@ -60,9 +72,10 @@ export const FocusTimer: React.FC = () => {
   // Lift state up to mutable variables to persist current values
   const [seconds, setSeconds] = useState(state.seconds);
   const [isActive, setIsActive] = useState(state.isActive);
+  const startTimeRef = useRef(state.startTime);
   
   // Extract constants from initial state (they don't change during session)
-  const { mode, taskName, targetMinutes } = state;
+  const { mode, taskName, taskId, targetMinutes } = state;
 
   // Hold Logic State
   const [isHolding, setIsHolding] = useState(false);
@@ -70,23 +83,27 @@ export const FocusTimer: React.FC = () => {
   const holdIntervalRef = useRef<any>(null);
   const HOLD_DURATION = 5000; // 5 seconds
 
-  // Play Mode allowance (mocked for demo)
-  const PLAY_ALLOWANCE_SECONDS = 45 * 60; 
+  const playAllowanceSeconds = Math.max(0, Math.floor((profile?.rewardBalance || 0) * 60));
 
   // Persistence Effect
   useEffect(() => {
      const sessionData = {
          mode,
          taskName,
+         taskId,
          targetMinutes,
          seconds, // Current seconds
+         startTime: startTimeRef.current,
+         isActive,
+         lastUpdatedAt: Date.now(),
+         minimized: false
          // We don't save isActive as true; restoring always defaults to false (paused)
      };
      
      if (mode) {
         localStorage.setItem('focus_session', JSON.stringify(sessionData));
      }
-  }, [seconds, mode, taskName, targetMinutes]);
+  }, [seconds, mode, taskName, taskId, targetMinutes, isActive]);
 
   // Timer logic
   useEffect(() => {
@@ -101,17 +118,26 @@ export const FocusTimer: React.FC = () => {
     return () => clearInterval(interval);
   }, [isActive, seconds]);
 
+  useEffect(() => {
+    if (mode !== 'play') return;
+    if (!isActive) return;
+    if (playAllowanceSeconds <= 0) return;
+    if (playAllowanceSeconds - seconds <= 0) {
+      setIsHolding(false);
+      finishSession();
+    }
+  }, [isActive, mode, playAllowanceSeconds, seconds]);
+
   // Hold Logic Effect
   useEffect(() => {
     if (isHolding) {
-      holdIntervalRef.current = setInterval(() => {
+      holdIntervalRef.current = setInterval(async () => {
         setHoldProgress(prev => {
            const newProgress = prev + (50 / HOLD_DURATION) * 100;
            if (newProgress >= 100) {
                clearInterval(holdIntervalRef.current);
-               // Clean exit
-               localStorage.removeItem('focus_session');
-               navigate('/home');
+               // Clean exit logic
+               finishSession();
                return 100;
            }
            return newProgress;
@@ -127,6 +153,102 @@ export const FocusTimer: React.FC = () => {
     };
   }, [isHolding, navigate]);
 
+  useEffect(() => {
+    if (isActive) {
+      nativeBridge.startTimer(mode as any, { taskId, targetMinutes, startTime: startTimeRef.current });
+    }
+  }, [isActive]);
+
+  useEffect(() => {
+    const sub = nativeBridge.onTick((data) => {
+      if (!isActive) return;
+      setSeconds(s => s + Math.round(data.deltaMs / 1000));
+    });
+    const fin = nativeBridge.onFinish(() => {
+      setIsActive(false);
+    });
+    return () => {
+      sub.remove();
+      fin.remove();
+    };
+  }, [isActive]);
+
+  const finishSession = async () => {
+      // 1. Calculate final duration
+      // Note: In a real app, calculate diff between Now and StartTime - PausedTime for accuracy
+      // Here we trust 'seconds' for simplicity
+      const finalSeconds = seconds;
+      const durationMinutes = finalSeconds / 60;
+      if (durationMinutes < 5) {
+        if (mode === 'play') {
+          await SessionService.recordSession({
+            mode,
+            durationMinutes,
+            startTime: startTimeRef.current,
+            endTime: new Date().toISOString(),
+            status: 'completed',
+            taskId
+          });
+        }
+        localStorage.removeItem('focus_session');
+        navigate('/home');
+        return;
+      }
+      
+      // 2. Determine Status
+      let status: 'completed' | 'abandoned' = 'completed';
+      if (mode === 'task' && durationMinutes < targetMinutes) {
+          status = 'abandoned'; // Or just 'active' if we allow pausing?
+          // For demo: if you hold-to-stop before target, it's abandoned/failed
+      }
+
+      // 3. Record to DB
+      try { await nativeBridge.stopTimer(); } catch {}
+      const result = await SessionService.recordSession({
+          mode,
+          durationMinutes,
+          startTime: startTimeRef.current,
+          endTime: new Date().toISOString(),
+          status,
+          taskId
+      });
+
+      // 4. Clear local persistence
+      localStorage.removeItem('focus_session');
+
+      // 5. Navigate to Result
+      if (mode === 'play') {
+         navigate('/home');
+         return;
+      }
+      if (mode === 'task') {
+         const initialAccumulated = state.accumulatedMinutes || 0;
+         const totalAccumulated = Math.floor(initialAccumulated + durationMinutes);
+         const isTaskFail = totalAccumulated < targetMinutes;
+         if (isTaskFail) {
+           navigate('/fail', {
+             state: {
+               mode,
+               taskName,
+               accumulatedMinutes: totalAccumulated,
+               targetMinutes,
+               taskId
+             }
+           });
+         } else {
+           navigate('/success', {
+             state: {
+               mode,
+               duration: Math.floor(durationMinutes),
+               reward: result.rewardChange
+             }
+           });
+         }
+         return;
+      }
+      navigate('/home');
+  };
+
   const startHold = () => setIsHolding(true);
   
   const endHold = () => {
@@ -135,13 +257,15 @@ export const FocusTimer: React.FC = () => {
   };
 
   const handleMinimize = () => {
-      if (mode === 'task') {
-          // Task Mode: Return to Tasks section
-          navigate('/tasks');
-      } else {
-          // Focus/Play Mode: "Clicking the down arrow returns you to the phone's home screen"
-          navigate('/home'); 
-      }
+      try {
+        const savedSessionStr = localStorage.getItem('focus_session');
+        if (savedSessionStr) {
+          const session = JSON.parse(savedSessionStr);
+          localStorage.setItem('focus_session', JSON.stringify({ ...session, minimized: true, isActive, lastUpdatedAt: Date.now() }));
+        }
+      } catch {}
+      try { nativeBridge.minimizeApp(); } catch {}
+      navigate('/home');
   };
 
   const formatTime = (totalSeconds: number) => {
@@ -152,7 +276,7 @@ export const FocusTimer: React.FC = () => {
     return { h: format(hrs), m: format(mins), s: format(secs) };
   };
 
-  const displaySeconds = mode === 'play' ? PLAY_ALLOWANCE_SECONDS - seconds : seconds;
+  const displaySeconds = mode === 'play' ? Math.max(0, playAllowanceSeconds - seconds) : seconds;
   const time = formatTime(displaySeconds);
 
   // Focus Rewards

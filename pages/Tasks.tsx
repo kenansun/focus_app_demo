@@ -2,59 +2,52 @@ import React, { useState } from 'react';
 import { Icon } from '../components/Icon';
 import { useNavigate } from 'react-router-dom';
 import { GoalModal } from '../components/GoalModal';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { TaskService } from '../src/services/taskService';
+import { SessionService } from '../src/services/sessionService';
+import { TaskEntity } from '../src/db/types';
+import { db } from '../src/db/db';
 
 export const Tasks: React.FC = () => {
   const navigate = useNavigate();
   const [showGoalModal, setShowGoalModal] = useState(false);
 
-  // Mock Data with one task exceeding target to demonstrate the feature
-  const [tasks] = useState([
-    { 
-      id: '1', 
-      title: 'Vocabulary Practice', 
-      targetMinutes: 30, 
-      accumulatedMinutes: 32, // Exceeds target
-      reward: 5 
-    },
-    { 
-      id: '2', 
-      title: "Reading 'Atomic Habits'", 
-      targetMinutes: 45, 
-      accumulatedMinutes: 5, 
-      reward: 10 
-    }
-  ]);
+  // Live Query for real-time task updates
+  const tasks = useLiveQuery(() => TaskService.getActiveTasks(), []) || [];
+  const recentTaskLogs = useLiveQuery(async () => {
+    const sessions = await SessionService.getRecentTaskSessions(2);
+    const pairs = await Promise.all(sessions.map(async s => ({
+      session: s,
+      task: s.taskId ? await db.tasks.get(s.taskId) : null
+    })));
+    return pairs;
+  }, []) || [];
 
-  const handleStartTask = (taskName: string, targetMinutes: number, accumulatedMinutes: number = 0) => {
+  const handleStartTask = (task: TaskEntity) => {
     navigate('/focus', { 
       state: { 
         mode: 'task', 
-        taskName, 
-        targetMinutes, 
-        accumulatedMinutes // Pass existing progress
+        taskName: task.title,
+        taskId: task.id,
+        targetMinutes: task.targetMinutes, 
+        accumulatedMinutes: task.accumulatedMinutes
       } 
     });
   };
 
-  const handleGiveUp = (task: typeof tasks[0]) => {
-    navigate('/fail', {
-      state: {
-        mode: 'task',
-        taskName: task.title,
-        accumulatedMinutes: task.accumulatedMinutes,
-        targetMinutes: task.targetMinutes
-      }
-    });
+  const handleGiveUp = async (task: TaskEntity) => {
+    // Mark as abandoned
+    await TaskService.updateStatus(task.id, 'abandoned');
   };
 
-  const handleComplete = (task: typeof tasks[0]) => {
-    navigate('/success', {
-      state: {
-        mode: 'task',
-        duration: task.accumulatedMinutes,
-        reward: task.reward
-      }
-    });
+  const handleComplete = async (task: TaskEntity) => {
+    // Mark as completed
+    await TaskService.updateStatus(task.id, 'completed');
+  };
+
+  const handleGoalCreate = async (title: string, targetMinutes: number, rewardMinutes: number) => {
+      await TaskService.createTask(title, targetMinutes, rewardMinutes);
+      setShowGoalModal(false);
   };
 
   return (
@@ -81,12 +74,13 @@ export const Tasks: React.FC = () => {
             {tasks.map(task => {
               const progressPercent = Math.min(100, Math.round((task.accumulatedMinutes / task.targetMinutes) * 100));
               const isCompleted = task.accumulatedMinutes >= task.targetMinutes;
+              const potentialReward = Number(((task.rewardOnComplete ?? (task.targetMinutes * 0.2))).toFixed(1));
 
               return (
                 <div key={task.id} className="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
                       <Icon name="trophy" className="text-sm filled text-yellow-500" />
-                      +{task.reward}m Play
+                      +{potentialReward}m Play
                   </div>
                   <div className="flex flex-col gap-3 pt-2">
                       <div>
@@ -109,7 +103,7 @@ export const Tasks: React.FC = () => {
                       </div>
                       <div className="flex gap-3 mt-2">
                         <button 
-                          onClick={() => handleStartTask(task.title, task.targetMinutes, task.accumulatedMinutes)} 
+                          onClick={() => handleStartTask(task)} 
                           className="flex-1 bg-primary hover:bg-blue-600 text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
                         >
                             <Icon name="play_arrow" className="text-lg filled" /> Continue
@@ -146,40 +140,36 @@ export const Tasks: React.FC = () => {
               View All
             </button>
          </div>
-         <div className="flex flex-col bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center p-4 border-b border-slate-100 dark:border-slate-800">
-               <div className="flex-shrink-0 mr-4">
-                  <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                     <Icon name="check" className="text-xl" />
-                  </div>
-               </div>
-               <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-400 line-through truncate">Deep Work Session</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Yesterday • Completed</p>
-               </div>
-               <div className="text-right">
-                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400">60m</span>
-               </div>
-            </div>
-            {/* Fail Item */}
-            <div className="flex items-center p-4 border-b border-slate-100 dark:border-slate-800">
-               <div className="flex-shrink-0 mr-4">
-                  <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 dark:text-red-400">
-                     <Icon name="close" className="text-xl" />
-                  </div>
-               </div>
-               <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 truncate">Morning Jog</p>
-                  <p className="text-xs text-slate-400 mt-0.5">2 days ago • Gave Up</p>
-               </div>
-               <div className="text-right">
-                  <span className="text-sm font-bold text-slate-400">10m</span>
-                  <span className="text-xs text-slate-400 block">/ 30m</span>
-               </div>
-            </div>
-         </div>
-         <div className="p-8 text-center">
-            <p className="text-sm text-slate-400">You've reached the end of history</p>
+         <div className="flex flex-col gap-3">
+           {recentTaskLogs.length === 0 ? (
+             <div className="p-8 text-center">
+               <p className="text-sm text-slate-400">No recent task sessions</p>
+             </div>
+           ) : (
+             recentTaskLogs.map(({ session, task }) => {
+               const title = task?.title || 'Task';
+               const minutes = Number(session.durationMinutes.toFixed(1));
+               const statusColor = session.status === 'completed' ? 'text-emerald-600' : 'text-red-500';
+               const statusBg = session.status === 'completed' ? 'bg-emerald-100 dark:bg-emerald-900/20' : 'bg-red-100 dark:bg-red-900/20';
+               const statusBorder = session.status === 'completed' ? 'border-emerald-200 dark:border-emerald-800' : 'border-red-200 dark:border-red-800';
+               return (
+                 <div key={session.id} className={`flex items-center justify-between bg-white dark:bg-surface-dark rounded-xl p-4 border ${statusBorder}`}>
+                   <div className="flex items-center gap-3">
+                     <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                       <Icon name="flag" />
+                     </div>
+                     <div>
+                       <p className="text-sm font-semibold text-slate-900 dark:text-white">{title}</p>
+                       <p className="text-xs text-slate-500 dark:text-slate-400">{minutes} min</p>
+                     </div>
+                   </div>
+                   <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusBg} ${statusColor}`}>
+                     {session.status}
+                   </div>
+                 </div>
+               );
+             })
+           )}
          </div>
       </main>
       
@@ -192,7 +182,11 @@ export const Tasks: React.FC = () => {
          </button>
       </div>
 
-      <GoalModal isOpen={showGoalModal} onClose={() => setShowGoalModal(false)} />
+      <GoalModal 
+        isOpen={showGoalModal} 
+        onClose={() => setShowGoalModal(false)}
+        onSubmit={handleGoalCreate} // Assuming GoalModal accepts this prop now
+      />
     </div>
   );
 };

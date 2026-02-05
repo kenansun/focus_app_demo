@@ -5,24 +5,35 @@ import { Icon } from './Icon';
 interface GoalModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSubmit?: (title: string, duration: number, rewardMinutes: number) => void;
 }
 
-export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
+export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSubmit }) => {
   const navigate = useNavigate();
   const [taskName, setTaskName] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('45m');
+  const [rewardMinutes, setRewardMinutes] = useState('9.0');
 
   const getDurationMinutes = (str: string) => parseInt(str.replace('m', ''));
 
   const handleStart = () => {
-    onClose();
-    navigate('/focus', { 
-      state: { 
-        mode: 'task', 
-        taskName: taskName || 'Untitled Task', 
-        targetMinutes: getDurationMinutes(selectedDuration) 
-      } 
-    });
+    const duration = getDurationMinutes(selectedDuration);
+    const title = taskName || 'Untitled Task';
+    const reward = Math.max(0, parseFloat(rewardMinutes || '0'));
+
+    if (onSubmit) {
+      onSubmit(title, duration, Number.isFinite(reward) ? Number(reward.toFixed(1)) : 0);
+    } else {
+      // Fallback legacy behavior (direct navigation)
+      onClose();
+      navigate('/focus', { 
+        state: { 
+          mode: 'task', 
+          taskName: title, 
+          targetMinutes: duration 
+        } 
+      });
+    }
   };
 
   if (!isOpen) return null;
@@ -80,7 +91,18 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
            </div>
            <div className="z-10">
              <p className="text-xs font-bold text-yellow-700 dark:text-yellow-500 uppercase tracking-wide">Reward</p>
-             <p className="text-sm font-semibold text-slate-900 dark:text-white">Earn: 5 min of Play</p>
+             <div className="flex items-center gap-2">
+               <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Earn (min):</label>
+               <input 
+                 type="number" 
+                 step="0.1" 
+                 min="0" 
+                 value={rewardMinutes}
+                 onChange={(e) => setRewardMinutes(e.target.value)}
+                 className="w-24 px-2 py-1 rounded-lg border border-yellow-300 dark:border-yellow-800 bg-white dark:bg-yellow-900/20 text-slate-900 dark:text-white"
+               />
+               <span className="text-xs text-slate-500 dark:text-slate-400">(one decimal)</span>
+             </div>
            </div>
            <Icon name="emoji_events" className="absolute -right-2 -bottom-4 text-8xl text-yellow-500/10 rotate-12" filled />
         </div>
@@ -89,7 +111,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
           onClick={handleStart}
           className="w-full py-4 bg-primary hover:bg-primary-dark text-white rounded-xl font-bold text-lg shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 group"
         >
-          Start Task
+          {onSubmit ? 'Create Task' : 'Start Task'}
           <Icon name="arrow_forward" className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
